@@ -11,10 +11,10 @@ warnings.filterwarnings('ignore')
 # Step 1 - generation of our data
 
 def generate_data(n_data):
-    x = np.random.uniform(0.1, 10, n_data)
+    x = np.random.uniform(0, 10, n_data)
     x = np.sort(x)
 
-    y_clean = (np.log(x) + 1) * np.cos(x) + np.sin(2 * x)
+    y_clean = (np.log(x + 1e-9) + 1) * np.cos(x) + np.sin(2 * x)
     noise = np.random.randn(n_data)
     y_noisy = y_clean + noise
 
@@ -415,7 +415,7 @@ lambdas = np.logspace(-3,1,10)
 """Original no regularization for base 45"""
 
 model_noreg = LinearRegression(add_bias=True)
-y_noreg = model.fit(phi, y_noisy).predict(phi).reshape(-1)
+y_noreg = model_noreg.fit(phi, y_noisy).predict(phi).reshape(-1)
 
 plt.figure(figsize=(7, 4))
 plt.plot(x, y_noisy, '.', alpha=0.6, label='data' if idx == 0 else None)
@@ -934,27 +934,21 @@ def evaluate_loss(x, y, w0, w1):
     y_pred = w0 * x + w1
     return np.mean((y - y_pred)**2)
 
-# Storing loss values
-ridge_loss_values = []
+# Fit-and-evaluate for each λ (L1 and L2)
 lasso_loss_values = []
+for lam in l1_values:
+    m = LinearRegression(add_bias=True, l1_reg=lam, l2_reg=0)
+    m.fit_lasso(x, y_noisy_linear)
+    w0, b = m.w[0], m.w[1]
+    lasso_loss_values.append(evaluate_loss(x, y_noisy_linear, w0, b))
 
-# Lasso L1, l1=0.001 => w0=-3.1386, w1=8.4249
-lasso_loss_values.append(evaluate_loss(x,y_noisy_linear, -3.1386, 8.4249))
-# Lasso L1, l1=0.01 => w0=-3.1323, w1=8.3883
-lasso_loss_values.append(evaluate_loss(x,y_noisy_linear, -3.1323, 8.3883))
-# Lasso L1, l1=0.1 => w0=-3.0694, w1=8.0226
-lasso_loss_values.append(evaluate_loss(x,y_noisy_linear, -3.0694, 8.0226))
-# Lasso L1, l1=1.0 => w0=-2.4407, w1=4.3649
-lasso_loss_values.append(evaluate_loss(x,y_noisy_linear, -2.4407, 4.3649))
-
-# Ridge L2, l2=0.001 => w0=-3.0431, w1=7.8451
-ridge_loss_values.append(evaluate_loss(x,y_noisy_linear, -3.0431, 7.8451))
-# Ridge L2, l2=0.01 => w0=-2.9748, w1=7.4364
-ridge_loss_values.append(evaluate_loss(x,y_noisy_linear, -2.9748, 7.4364))
-# Ridge L2, l2=0.1 => w0=-2.5216, w1=4.7497
-ridge_loss_values.append(evaluate_loss(x,y_noisy_linear, -2.5216, 4.7497))
-# Ridge L2, l2=1.0 => w0=-1.7670, w1=0.8033
-ridge_loss_values.append(evaluate_loss(x,y_noisy_linear, -1.7670, 0.8033))
+ridge_loss_values = []
+for lam in l2_values:
+    m = LinearRegression(add_bias=True, l1_reg=0, l2_reg=lam)
+    opt = GradientDescent(learning_rate=0.01, max_iters=10_000)
+    m.fit_ridge(x, y_noisy_linear, opt)
+    w0, b = m.w[0], m.w[1]
+    ridge_loss_values.append(evaluate_loss(x, y_noisy_linear, w0, b))
 
 # Plot
 plt.figure(figsize=(5,3))
