@@ -1,4 +1,3 @@
-# Commented out IPython magic to ensure Python compatibility.
 import numpy as np
 # %matplotlib inline
 import matplotlib.pyplot as plt
@@ -32,10 +31,6 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-"""I will use the code that was on tutorial
-
-Tutorial code
-"""
 
 class GradientDescent:
     def __init__(self, learning_rate=.001, max_iters=1e4, epsilon=1e-8, record_history=False):
@@ -145,21 +140,21 @@ model = LinearRegression()
 x_min, x_max = float(np.min(x)), float(np.max(x))
 sigma = 1.0
 
-def gaussian_phi(x_local, D) -> np.ndarray:
+def gaussian_phi(x_local, D, sigma_local = sigma) -> np.ndarray:
     if D == 0:
         return np.empty((x_local.shape[0], 0))
     mu = np.linspace(x_min, x_max, D)
-    return np.exp(-((x_local[:, None] - mu[None, :]) / sigma) ** 2)
+    return np.exp(-((x_local[:, None] - mu[None, :]) / sigma_local) ** 2)
 
-def fit_num_bases(D: int, x_local, y_train) -> np.ndarray:
-    phi = gaussian_phi(x_local, D)
+def fit_num_bases(D: int, x_local, y_train, sigma_local = sigma) -> np.ndarray:
+    phi = gaussian_phi(x_local, D, sigma_local)
     yh = model.fit(phi, y_train).predict(phi)
     return yh
 
 x_dense_for_basis = np.linspace(x_min, x_max, 400)
 
-def plot_basis(ax, D):
-    Phi = gaussian_phi(x_dense_for_basis, D)
+def plot_basis(ax, D, sigma_local = sigma):
+    Phi = gaussian_phi(x_dense_for_basis, D, sigma_local)
     for j in range(Phi.shape[1]):
         ax.plot(x_dense_for_basis, Phi[:, j], linewidth=1.2)
     ax.set_title(f'D = {D}')
@@ -274,8 +269,6 @@ test_sse  = {D: [] for D in Ds}
 train_mse = {D: [] for D in Ds}
 test_mse  = {D: [] for D in Ds}
 
-np.random.seed(15)
-
 for r in range(R):
     y_r = y_clean + np.random.randn(n_data)
     tr_idx, te_idx = train_val_split(x, y_r, val_fraction=0.2, random_state=r)
@@ -300,6 +293,229 @@ ymin = float(np.min(y_clean))
 ymax = float(np.max(y_clean))
 pad  = 0.10 * (ymax - ymin)
 ylims = (ymin - pad, ymax + pad)
+
+fig, axes = plt.subplots(5, 2, figsize=(14, 20), sharex=True, sharey=True)
+
+for idx, D in enumerate(Ds):
+    ax = axes[idx // 2, idx % 2]
+    fits = np.column_stack(all_fits[D])      # (N, R)
+    mean_fit = np.mean(fits, axis=1)
+
+    for r in range(R):
+        ax.plot(x, fits[:, r], color='green', alpha=0.35, linewidth=1)
+
+    ax.plot(x, y_clean, 'b-', linewidth=1.8, label='ground truth' if idx == 0 else None)
+    ax.plot(x, mean_fit, 'r-', linewidth=2.0, label='average of 10 fits' if idx == 0 else None)
+
+    ax.set_title(f'D = {D}')
+    ax.set_ylim(*ylims)
+    if idx // 2 == 4: ax.set_xlabel('x')
+    if idx % 2  == 0: ax.set_ylabel('y')
+
+handles, labels = axes[0, 0].get_legend_handles_labels()
+if handles:
+    fig.legend(handles, labels, loc='upper right')
+fig.suptitle('Bias–Variance: 10 fits per D (Gaussian bases)', y=0.995)
+plt.tight_layout(rect=[0, 0, 1, 0.97])
+plt.show()
+
+avg_train = np.array([np.mean(train_sse[D]) for D in Ds])
+avg_test  = np.array([np.mean(test_sse[D])  for D in Ds])
+
+plt.figure(figsize=(7, 4))
+plt.plot(Ds, avg_train, marker='o', label='Average Train SSE')
+plt.plot(Ds, avg_test,  marker='o', label='Average Test SSE')
+plt.xlabel('Number of Gaussian bases (D)')
+plt.ylabel('SSE')
+plt.yscale('log')
+plt.title('Bias–Variance: Train/Test error vs D (averaged over 10)')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.show()
+
+"""# BIAS AND VARIANCE"""
+
+D_more = list(range(0, 46))
+train_sse_more = {D: [] for D in D_more}
+test_sse_more  = {D: [] for D in D_more}
+train_mse_more = {D: [] for D in D_more}
+test_mse_more  = {D: [] for D in D_more}
+all_fits_more = {D: [] for D in D_more}
+
+for r in range(20):
+    y_r = y_clean + np.random.randn(n_data)
+    tr_idx, te_idx = train_val_split(x, y_r, val_fraction=0.2, random_state=r)
+
+    for D in D_more:
+        Phi_tr  = gaussian_phi(x[tr_idx], D)
+        Phi_te  = gaussian_phi(x[te_idx], D)
+        Phi_all = gaussian_phi(x,        D)
+
+        m = LinearRegression(add_bias=True).fit(Phi_tr, y_r[tr_idx])
+        yh_tr  = m.predict(Phi_tr)
+        yh_te  = m.predict(Phi_te)
+        yh_all = m.predict(Phi_all)
+
+        train_sse_more[D].append(float(np.sum((y_r[tr_idx] - yh_tr) ** 2)))
+        test_sse_more[D].append(float(np.sum((y_r[te_idx]  - yh_te) ** 2)))
+        train_mse_more[D].append(float(np.mean((y_r[tr_idx] - yh_tr) ** 2)))
+        test_mse_more[D].append(float(np.mean((y_r[te_idx] - yh_te) ** 2)))
+        all_fits_more[D].append(yh_all)
+
+Ds_arr = np.array(D_more)
+
+train_runs = np.asarray([train_mse_more[D] for D in Ds_arr]).T
+test_runs  = np.asarray([test_mse_more[D]  for D in Ds_arr]).T
+R, K = train_runs.shape
+
+train_med = np.median(train_runs, axis=0)
+test_med  = np.median(test_runs,  axis=0)
+q25_tr, q75_tr = np.percentile(train_runs, [25, 75], axis=0)
+q25_te, q75_te = np.percentile(test_runs,  [25, 75], axis=0)
+
+cap = np.percentile(np.concatenate([train_runs.ravel(), test_runs.ravel()]), 95)
+train_plot = np.clip(train_runs, None, cap)
+test_plot  = np.clip(test_runs,  None, cap)
+
+plt.figure(figsize=(8, 5))
+
+for r in range(R):
+    plt.plot(Ds_arr, train_plot[r], linewidth=1.0, alpha=0.18, color='C0', label='_nolegend_')
+    plt.plot(Ds_arr, test_plot[r],  linewidth=1.0, alpha=0.18, color='C3', label='_nolegend_')
+
+plt.plot(Ds_arr, train_med, linewidth=3.0, color='C0', label='med training error')
+plt.plot(Ds_arr, test_med,  linewidth=3.0, color='C3', label='med valid error')
+
+plt.yscale('log')
+plt.ylim(top=cap)
+
+plt.xlabel('Number of Gaussian bases (D)')
+plt.ylabel('MSE')
+plt.title('Training/Test error vs model complexity')
+plt.grid(True, alpha=0.3)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+"""The model is very simple so there wasnt much trainng variance at the  begginnig
+
+# Affect of Sigma on the model fit
+
+**Sigma = 2**
+"""
+
+sig2= 2
+
+fig, axes = plt.subplots(1, 3, figsize=(12, 3.6), sharex=True, sharey=True)
+for ax, D in zip(axes, [5, 15, 45]):
+    plot_basis(ax, D, sig2)
+fig.suptitle('Gaussian basis plots for range of generated data')
+plt.tight_layout()
+plt.show()
+
+all_fits = {D: [] for D in Ds}
+train_sse = {D: [] for D in Ds}
+test_sse  = {D: [] for D in Ds}
+
+train_mse = {D: [] for D in Ds}
+test_mse  = {D: [] for D in Ds}
+
+for r in range(R):
+    y_r = y_clean + np.random.randn(n_data)
+    tr_idx, te_idx = train_val_split(x, y_r, val_fraction=0.2, random_state=r)
+
+    for D in Ds:
+        Phi_tr  = gaussian_phi(x[tr_idx], D, sig2)
+        Phi_te  = gaussian_phi(x[te_idx], D, sig2)
+        Phi_all = gaussian_phi(x,         D, sig2)
+
+        m = LinearRegression(add_bias=True).fit(Phi_tr, y_r[tr_idx])
+        yh_tr  = m.predict(Phi_tr)
+        yh_te  = m.predict(Phi_te)
+        yh_all = m.predict(Phi_all)
+
+        train_sse[D].append(float(np.sum((y_r[tr_idx] - yh_tr) ** 2)))
+        test_sse[D].append(float(np.sum((y_r[te_idx]  - yh_te) ** 2)))
+        train_mse[D].append(float(np.mean((y_r[tr_idx] - yh_tr) ** 2)))
+        test_mse[D].append(float(np.mean((y_r[te_idx] - yh_te) ** 2)))
+        all_fits[D].append(yh_all)
+
+fig, axes = plt.subplots(5, 2, figsize=(14, 20), sharex=True, sharey=True)
+
+for idx, D in enumerate(Ds):
+    ax = axes[idx // 2, idx % 2]
+    fits = np.column_stack(all_fits[D])      # (N, R)
+    mean_fit = np.mean(fits, axis=1)
+
+    for r in range(R):
+        ax.plot(x, fits[:, r], color='green', alpha=0.35, linewidth=1)
+
+    ax.plot(x, y_clean, 'b-', linewidth=1.8, label='ground truth' if idx == 0 else None)
+    ax.plot(x, mean_fit, 'r-', linewidth=2.0, label='average of 10 fits' if idx == 0 else None)
+
+    ax.set_title(f'D = {D}')
+    ax.set_ylim(*ylims)
+    if idx // 2 == 4: ax.set_xlabel('x')
+    if idx % 2  == 0: ax.set_ylabel('y')
+
+handles, labels = axes[0, 0].get_legend_handles_labels()
+if handles:
+    fig.legend(handles, labels, loc='upper right')
+fig.suptitle('Bias–Variance: 10 fits per D (Gaussian bases)', y=0.995)
+plt.tight_layout(rect=[0, 0, 1, 0.97])
+plt.show()
+
+avg_train = np.array([np.mean(train_sse[D]) for D in Ds])
+avg_test  = np.array([np.mean(test_sse[D])  for D in Ds])
+
+plt.figure(figsize=(7, 4))
+plt.plot(Ds, avg_train, marker='o', label='Average Train SSE')
+plt.plot(Ds, avg_test,  marker='o', label='Average Test SSE')
+plt.xlabel('Number of Gaussian bases (D)')
+plt.ylabel('SSE')
+plt.yscale('log')
+plt.title('Bias–Variance: Train/Test error vs D (averaged over 10)')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.show()
+
+"""**Sigma = 0.5**"""
+
+sig_half= 0.5
+
+fig, axes = plt.subplots(1, 3, figsize=(12, 3.6), sharex=True, sharey=True)
+for ax, D in zip(axes, [5, 15, 45]):
+    plot_basis(ax, D, 0.5)
+fig.suptitle('Gaussian basis plots for range of generated data')
+plt.tight_layout()
+plt.show()
+
+all_fits = {D: [] for D in Ds}
+train_sse = {D: [] for D in Ds}
+test_sse  = {D: [] for D in Ds}
+
+train_mse = {D: [] for D in Ds}
+test_mse  = {D: [] for D in Ds}
+
+for r in range(R):
+    y_r = y_clean + np.random.randn(n_data)
+    tr_idx, te_idx = train_val_split(x, y_r, val_fraction=0.2, random_state=r)
+
+    for D in Ds:
+        Phi_tr  = gaussian_phi(x[tr_idx], D, sig_half)
+        Phi_te  = gaussian_phi(x[te_idx], D, sig_half)
+        Phi_all = gaussian_phi(x,         D, sig_half)
+
+        m = LinearRegression(add_bias=True).fit(Phi_tr, y_r[tr_idx])
+        yh_tr  = m.predict(Phi_tr)
+        yh_te  = m.predict(Phi_te)
+        yh_all = m.predict(Phi_all)
+
+        train_sse[D].append(float(np.sum((y_r[tr_idx] - yh_tr) ** 2)))
+        test_sse[D].append(float(np.sum((y_r[te_idx]  - yh_te) ** 2)))
+        train_mse[D].append(float(np.mean((y_r[tr_idx] - yh_tr) ** 2)))
+        test_mse[D].append(float(np.mean((y_r[te_idx] - yh_te) ** 2)))
+        all_fits[D].append(yh_all)
 
 fig, axes = plt.subplots(5, 2, figsize=(14, 20), sharex=True, sharey=True)
 
@@ -534,6 +750,36 @@ plt.title("Train and Validation MSE vs λ (10-fold CV, 50 datasets)")
 plt.xlabel("λ (log scale)")
 plt.ylabel("Mean Squared Error")
 plt.legend()
+plt.show()
+
+"""Visualization of the weights of the L1 and L2 models trained on the D=45 basis functions, using the best lambda found during cross-validation"""
+
+# train final L1 (Lasso) model on all data with best lambda
+model_L1 = LinearRegression(add_bias=True, l1_reg=best_lambda_L1, l2_reg=0)
+model_L1.fit_lasso(phi, y_noisy)
+
+# train final L2 (Ridge) model on all data with best lambda
+model_L2 = LinearRegression(add_bias=True, l1_reg=0, l2_reg=best_lambda_L2)
+optimizer_final = GradientDescent(learning_rate=0.01, max_iters=10000)
+model_L2.fit_ridge(phi, y_noisy, optimizer_final)
+
+feature_indices = np.arange(model_L1.w.shape[0])
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+# L1 plot
+axes[0].stem(feature_indices, model_L1.w, 'r', markerfmt='ro', basefmt='r-')
+axes[0].set_title(f"L1 weights at $\lambda$={best_lambda_L1:.4f}")
+axes[0].set_xlabel(f"features")
+axes[0].set_ylabel("weight value")
+axes[0].grid(True, alpha=0.3)
+
+# L2 plot
+axes[1].stem(feature_indices, model_L2.w, 'b', markerfmt='bo', basefmt='b-')
+axes[1].set_title(f"L2 weights at $\lambda$={best_lambda_L2:.4f}")
+axes[1].set_xlabel(f"features")
+axes[1].grid(True, alpha=0.3)
+
+plt.tight_layout()
 plt.show()
 
 # Make a function that extracts variance and bias for each value of lambda
