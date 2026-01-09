@@ -5,6 +5,10 @@ McGill COMP 551 - Mini-Project 2: Exploring model complexity, bias-variance trad
 - Adam Dufour (261193949)
 - Tran Tuan Khai Tuan Phan
 
+![l1-l2-weights](figures/l1-l2-weights.png)
+![gaussian-basis-fits](figures/all-gaussian-bases-fits.png)
+![model-complexity-error](figures/model-complexity.png)
+
 ## Prerequisites
 * Python 3.8+
 * Packages in requirements.txt
